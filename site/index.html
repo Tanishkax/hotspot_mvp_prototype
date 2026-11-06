@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HotSpot Sync — India Fire Activity Explorer</title>
   <meta name="description" content="Explore 25 years of harmonised MODIS and VIIRS fire hotspot activity across India: draw a region, inspect the monthly burning calendar, compare against history and detect anomalies.">
-  <meta name="theme-color" content="#0b0f14">
+  <meta name="theme-color" content="#090c11">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="vendor/leaflet-draw/leaflet.draw.css">
@@ -13,268 +13,326 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
+  <div class="atmosphere" aria-hidden="true"></div>
 
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="#top" aria-label="HotSpot Sync home">
+      <a class="brand" href="#/explore" aria-label="HotSpot Sync — Explore">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fde725"/><stop offset=".55" stop-color="#ff8a3d"/><stop offset="1" stop-color="#e2453c"/></linearGradient></defs><path fill="url(#g)" d="M16 2c1.2 4.6-1.8 6.9-4.2 9.6C9.4 14.3 7.5 17 7.5 20.6 7.5 25.8 11.3 30 16 30s8.5-4.2 8.5-9.4c0-4.1-2-7-4-9.2.4 2.3-.3 4.2-1.8 5.1.3-5.5-1.6-11-2.7-14.5Z"/><circle cx="16" cy="22" r="3.2" fill="#0b0f14"/></svg>
         <span class="brand-text">HotSpot<span>Sync</span></span>
       </a>
-      <nav class="site-nav" aria-label="Sections">
-        <a href="#explore">Explore</a>
-        <a href="#calendar">Calendar</a>
-        <a href="#insights">Insights</a>
-        <a href="#validation">Validation</a>
-        <a href="#methodology">Methodology</a>
+      <nav class="tabs" id="tabs" aria-label="Application sections">
+        <a class="tab" data-tab="explore" href="#/explore"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg><span>Explore</span></a>
+        <a class="tab" data-tab="insights" href="#/insights"><svg class="i" aria-hidden="true"><use href="#i-pulse"/></svg><span>Insights</span></a>
+        <a class="tab" data-tab="validation" href="#/validation"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span>Validation</span></a>
+        <a class="tab" data-tab="methodology" href="#/methodology"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg><span>Methodology</span></a>
       </nav>
       <div class="coverage-pill" id="coverage-pill" title="Dataset coverage">
         <span class="dot" aria-hidden="true"></span><span id="coverage-text">Loading data…</span>
       </div>
     </div>
+    <div class="context-bar" id="context-bar" aria-live="polite">
+      <div class="context-inner">
+        <span class="ctx-item"><span class="ctx-k">Region</span><span class="ctx-v" id="ctx-region">All of India</span></span>
+        <span class="ctx-item"><span class="ctx-k">Period</span><span class="ctx-v" id="ctx-period">—</span></span>
+        <span class="ctx-item"><span class="ctx-k">Metric</span><span class="ctx-v" id="ctx-metric">Hotspot count</span></span>
+        <span class="ctx-item ctx-cells"><span class="ctx-k">Cells</span><span class="ctx-v" id="ctx-cells">—</span></span>
+        <a class="ctx-edit" id="ctx-edit" data-tab-link="explore" href="#/explore">Change selection</a>
+      </div>
+    </div>
   </header>
 
   <main id="main">
-    <section class="hero" id="top">
-      <div class="hero-copy">
-        <p class="eyebrow">NASA Space Apps Challenge 2026 · MODIS × VIIRS</p>
-        <h1>Where and when India burns.</h1>
-        <p class="lede">Harmonised satellite fire detections from Terra, Aqua and Suomi-NPP, merged into one consistent monthly record. Draw any region to see its burning calendar, compare it with history, and find unusual months.</p>
-      </div>
-      <dl class="hero-facts" id="hero-facts" aria-live="polite"></dl>
-    </section>
-
-    <!-- EXPLORE -->
-    <section class="section" id="explore" aria-labelledby="explore-title">
-      <div class="section-head">
-        <h2 id="explore-title">Select a region and period</h2>
-        <p class="section-sub">Draw a rectangle or polygon on the map, enter coordinates, or choose a quick region. All panels update together.</p>
-      </div>
-
-      <div class="explore-grid">
-        <div class="card map-card">
-          <div id="map" class="map" role="application" aria-label="Interactive map of India. Use the drawing tools to select a region."></div>
-          <div class="map-status" id="map-status" aria-live="polite"></div>
+    <!-- ======================================================= EXPLORE -->
+    <section class="tab-panel" id="tab-explore" data-tab="explore" aria-labelledby="explore-title">
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Explore · MODIS × VIIRS harmonised record</p>
+          <h1 id="explore-title" tabindex="-1">Where and when India burns</h1>
+          <p class="lede">Satellite fire detections from Terra, Aqua and Suomi-NPP merged into one consistent monthly record. Choose a region and period; every tab follows your selection.</p>
         </div>
+        <dl class="hero-facts" id="hero-facts" aria-live="polite"></dl>
+      </div>
 
-        <aside class="card control-panel" aria-label="Selection controls">
-          <div class="panel-block">
-            <div class="block-title"><span>Region</span><button class="link-btn" id="btn-clear" type="button">Clear</button></div>
-            <p class="selection-summary" id="selection-summary">All of India (full data extent)</p>
-            <div class="chip-row" id="presets" role="group" aria-label="Quick regions"></div>
-            <details class="disclosure" id="bounds-details">
-              <summary>Enter bounds</summary>
-              <form id="bounds-form" class="bounds-form" novalidate>
-                <label>North <input name="north" inputmode="decimal" placeholder="e.g. 32.5" autocomplete="off"></label>
-                <label>South <input name="south" inputmode="decimal" placeholder="e.g. 29.5" autocomplete="off"></label>
-                <label>West <input name="west" inputmode="decimal" placeholder="e.g. 73.8" autocomplete="off"></label>
-                <label>East <input name="east" inputmode="decimal" placeholder="e.g. 77.6" autocomplete="off"></label>
-                <p class="form-error" id="bounds-error" role="alert"></p>
-                <button class="btn btn-primary" type="submit">Apply bounds</button>
-              </form>
+      <section class="section" id="explore" aria-label="Region and period selection">
+        <div class="explore-grid">
+          <div class="card card-raised map-card">
+            <div id="map" class="map" role="application" aria-label="Interactive map of India. Use the drawing tools to select a region."></div>
+            <div class="map-status" id="map-status" aria-live="polite"></div>
+          </div>
+
+          <aside class="card control-panel" aria-label="Selection controls">
+            <div class="panel-block">
+              <div class="block-title"><span>Region</span><button class="link-btn" id="btn-clear" type="button">Clear</button></div>
+              <p class="selection-summary" id="selection-summary">All of India (full data extent)</p>
+              <div class="chip-row" id="presets" role="group" aria-label="Quick regions"></div>
+              <details class="disclosure" id="bounds-details">
+                <summary>Enter bounds</summary>
+                <form id="bounds-form" class="bounds-form" novalidate>
+                  <label>North <input name="north" inputmode="decimal" placeholder="e.g. 32.5" autocomplete="off"></label>
+                  <label>South <input name="south" inputmode="decimal" placeholder="e.g. 29.5" autocomplete="off"></label>
+                  <label>West <input name="west" inputmode="decimal" placeholder="e.g. 73.8" autocomplete="off"></label>
+                  <label>East <input name="east" inputmode="decimal" placeholder="e.g. 77.6" autocomplete="off"></label>
+                  <p class="form-error" id="bounds-error" role="alert"></p>
+                  <button class="btn btn-primary" type="submit">Apply bounds</button>
+                </form>
+              </details>
+              <details class="disclosure">
+                <summary>Enter polygon vertices</summary>
+                <form id="polygon-form" class="polygon-form" novalidate>
+                  <label for="polygon-text">One <code>lat, lon</code> pair per line (decimal degrees)</label>
+                  <textarea id="polygon-text" rows="4" placeholder="30.9, 74.5&#10;31.6, 75.6&#10;30.3, 76.9&#10;29.6, 75.2"></textarea>
+                  <p class="form-error" id="polygon-error" role="alert"></p>
+                  <button class="btn btn-primary" type="submit">Apply polygon</button>
+                </form>
+              </details>
+            </div>
+
+            <div class="panel-block">
+              <div class="block-title"><span>Period</span></div>
+              <div class="range-row">
+                <fieldset class="ym-field"><legend>From</legend>
+                  <select id="start-month" aria-label="Start month"></select><select id="start-year" aria-label="Start year"></select>
+                </fieldset>
+                <fieldset class="ym-field"><legend>To</legend>
+                  <select id="end-month" aria-label="End month"></select><select id="end-year" aria-label="End year"></select>
+                </fieldset>
+              </div>
+              <p class="form-error" id="range-error" role="alert"></p>
+              <div class="chip-row" id="range-presets" role="group" aria-label="Period presets"></div>
+            </div>
+
+            <div class="panel-block">
+              <div class="block-title"><span>Metric</span></div>
+              <div class="segmented" role="radiogroup" aria-label="Metric">
+                <label><input type="radio" name="metric" value="h" checked><span>Hotspot count</span></label>
+                <label><input type="radio" name="metric" value="f"><span>Fire radiative power</span></label>
+              </div>
+            </div>
+
+            <div class="panel-block">
+              <div class="block-title"><span>Download</span></div>
+              <div class="download-grid">
+                <button class="btn" id="dl-monthly" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Monthly totals CSV</button>
+                <button class="btn" id="dl-cells" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Cell-level CSV</button>
+                <button class="btn" id="dl-geojson" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Selection GeoJSON</button>
+                <button class="btn" id="copy-link" type="button"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Copy share link</button>
+              </div>
+              <p class="hint" id="download-hint" aria-live="polite"></p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section kpi-section" aria-label="Key statistics">
+        <div class="kpi-grid" id="kpis"></div>
+      </section>
+
+      <section class="section" id="calendar" aria-labelledby="calendar-title">
+        <div class="calendar-layout">
+          <div class="card card-raised chart-card">
+            <div class="card-head">
+              <div>
+                <h2 id="calendar-title">Burning activity calendar</h2>
+                <p class="card-sub" id="calendar-sub">Monthly harmonised hotspots for the selected region. Click a month to see it in context.</p>
+              </div>
+              <div class="card-actions">
+                <button class="icon-btn" data-export="calendar" type="button" aria-label="Download calendar as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
+              </div>
+            </div>
+            <ul class="calendar-legend" aria-label="Calendar legend">
+              <li><span class="sw sw-zero"></span>Observed zero</li>
+              <li><span class="sw sw-nodata"></span>No satellite data</li>
+              <li><span class="sw sw-incomplete"></span>Incomplete month (outage)</li>
+              <li><span class="sw sw-high">▲</span>Unusually high</li>
+              <li><span class="sw sw-low">▼</span>Unusually low</li>
+              <li><span class="sw sw-outside"></span>Outside period</li>
+            </ul>
+            <div class="chart-wrap">
+              <div id="chart-calendar" class="chart chart-calendar" role="img" aria-label="Year by month heatmap of fire activity"></div>
+              <div class="chart-overlay" id="calendar-overlay" hidden></div>
+            </div>
+            <details class="table-view">
+              <summary>View as table</summary>
+              <div class="table-scroll" id="calendar-table"></div>
             </details>
-            <details class="disclosure">
-              <summary>Enter polygon vertices</summary>
-              <form id="polygon-form" class="polygon-form" novalidate>
-                <label for="polygon-text">One <code>lat, lon</code> pair per line (decimal degrees)</label>
-                <textarea id="polygon-text" rows="4" placeholder="30.9, 74.5&#10;31.6, 75.6&#10;30.3, 76.9&#10;29.6, 75.2"></textarea>
-                <p class="form-error" id="polygon-error" role="alert"></p>
-                <button class="btn btn-primary" type="submit">Apply polygon</button>
-              </form>
-            </details>
           </div>
 
-          <div class="panel-block">
-            <div class="block-title"><span>Period</span></div>
-            <div class="range-row">
-              <fieldset class="ym-field"><legend>From</legend>
-                <select id="start-month" aria-label="Start month"></select><select id="start-year" aria-label="Start year"></select>
-              </fieldset>
-              <fieldset class="ym-field"><legend>To</legend>
-                <select id="end-month" aria-label="End month"></select><select id="end-year" aria-label="End year"></select>
-              </fieldset>
-            </div>
-            <p class="form-error" id="range-error" role="alert"></p>
-            <div class="chip-row" id="range-presets" role="group" aria-label="Period presets"></div>
-          </div>
-
-          <div class="panel-block">
-            <div class="block-title"><span>Metric</span></div>
-            <div class="segmented" role="radiogroup" aria-label="Metric">
-              <label><input type="radio" name="metric" value="h" checked><span>Hotspot count</span></label>
-              <label><input type="radio" name="metric" value="f"><span>Fire radiative power</span></label>
-            </div>
-          </div>
-
-          <div class="panel-block">
-            <div class="block-title"><span>Download</span></div>
-            <div class="download-grid">
-              <button class="btn" id="dl-monthly" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Monthly totals CSV</button>
-              <button class="btn" id="dl-cells" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Cell-level CSV</button>
-              <button class="btn" id="dl-geojson" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Selection GeoJSON</button>
-              <button class="btn" id="copy-link" type="button"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Copy share link</button>
-            </div>
-            <p class="hint" id="download-hint" aria-live="polite"></p>
-          </div>
-        </aside>
-      </div>
+          <aside class="card month-detail" id="month-detail" aria-live="polite" aria-label="Selected month in historical context"></aside>
+        </div>
+      </section>
     </section>
 
-    <!-- KPIs -->
-    <section class="section kpi-section" aria-label="Key statistics">
-      <div class="kpi-grid" id="kpis"></div>
-    </section>
-
-    <!-- CALENDAR -->
-    <section class="section" id="calendar" aria-labelledby="calendar-title">
-      <div class="card chart-card">
-        <div class="card-head">
-          <div>
-            <h2 id="calendar-title">Burning activity calendar</h2>
-            <p class="card-sub" id="calendar-sub">Monthly harmonised hotspots for the selected region. Click a month to compare it with its history.</p>
-          </div>
-          <div class="card-actions">
-            <button class="icon-btn" data-export="calendar" type="button" aria-label="Download calendar as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
-          </div>
+    <!-- ======================================================= INSIGHTS -->
+    <section class="tab-panel" id="tab-insights" data-tab="insights" aria-labelledby="insights-title" hidden>
+      <div class="page-head page-head-compact">
+        <div>
+          <p class="eyebrow">Insights</p>
+          <h1 id="insights-title" tabindex="-1">Anomalies, history and critical periods</h1>
+          <p class="lede">Every figure is computed from the current selection. Baselines use the whole archive, so a month's flag does not change with the period filter.</p>
         </div>
-        <ul class="calendar-legend" aria-label="Calendar legend">
-          <li><span class="sw sw-zero"></span>Observed zero</li>
-          <li><span class="sw sw-nodata"></span>No satellite data</li>
-          <li><span class="sw sw-incomplete"></span>Incomplete month (outage)</li>
-          <li><span class="sw sw-high">▲</span>Unusually high</li>
-          <li><span class="sw sw-low">▼</span>Unusually low</li>
-          <li><span class="sw sw-outside"></span>Outside period</li>
-        </ul>
-        <div class="chart-wrap">
-          <div id="chart-calendar" class="chart chart-calendar" role="img" aria-label="Year by month heatmap of fire activity"></div>
-          <div class="chart-overlay" id="calendar-overlay" hidden></div>
-        </div>
-        <details class="table-view">
-          <summary>View as table</summary>
-          <div class="table-scroll" id="calendar-table"></div>
-        </details>
-      </div>
-    </section>
-
-    <!-- COMPARISON + ANOMALIES -->
-    <section class="section two-col" id="insights" aria-label="Historical comparison and anomalies">
-      <div class="card chart-card">
-        <div class="card-head">
-          <div>
-            <h2>Historical comparison</h2>
-            <p class="card-sub" id="compare-sub">Same calendar month in every other complete year</p>
-          </div>
-          <div class="card-actions">
-            <button class="link-btn" id="btn-unfocus" type="button" hidden>Back to latest month</button>
-            <button class="icon-btn" data-export="compare" type="button" aria-label="Download comparison chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
-          </div>
-        </div>
-        <div class="compare-summary" id="compare-summary" aria-live="polite"></div>
-        <div id="chart-compare" class="chart chart-md" role="img" aria-label="Bar chart of the same calendar month across years"></div>
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <div>
-            <h2>Anomalous months</h2>
-            <p class="card-sub">Robust modified z-score against the same month in other years</p>
-          </div>
-        </div>
-        <div id="anomaly-summary" class="anomaly-summary" aria-live="polite"></div>
-        <div class="anomaly-list-wrap"><ol class="anomaly-list" id="anomaly-list"></ol></div>
-      </div>
-    </section>
-
-    <!-- SEASONAL -->
-    <section class="section" aria-labelledby="seasonal-title">
-      <div class="section-head">
-        <h2 id="seasonal-title">Seasons and critical periods</h2>
-        <p class="section-sub">Calculated from complete months in the selected period.</p>
-      </div>
       <div class="insight-strip" id="seasonal-insights" aria-live="polite"></div>
-      <div class="two-col">
-        <div class="card chart-card">
+
+      <section class="section two-col" id="insights" aria-label="Historical comparison and anomalies">
+        <div class="card card-raised chart-card">
           <div class="card-head">
-            <div><h3>Average month</h3><p class="card-sub">Mean per calendar month · share of the annual cycle</p></div>
-            <div class="card-actions"><button class="icon-btn" data-export="profile" type="button" aria-label="Download seasonal chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div>
-          </div>
-          <div id="chart-profile" class="chart chart-md" role="img" aria-label="Average activity per calendar month"></div>
-          <div class="season-bars" id="season-bars"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="card-head">
-            <div><h3>Annual totals</h3><p class="card-sub" id="annual-sub">Partial years are faded</p></div>
-            <div class="card-actions"><button class="icon-btn" data-export="annual" type="button" aria-label="Download annual chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div>
-          </div>
-          <div id="chart-annual" class="chart chart-md" role="img" aria-label="Annual totals by year"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- VALIDATION -->
-    <section class="section" id="validation" aria-labelledby="validation-title">
-      <div class="section-head">
-        <h2 id="validation-title">Harmonisation and validation</h2>
-        <p class="section-sub">How well scaled MODIS reproduces VIIRS, tested on real data the ratios never saw.</p>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <div>
-            <h3>Monthly hotspot counts · real data holdout</h3>
-            <p class="card-sub" id="val-count-sub"></p>
-          </div>
-          <span class="badge badge-real">Real data · NASA FIRMS</span>
-        </div>
-        <div class="metric-table-wrap" id="val-count-table"></div>
-        <div class="grid-2">
-          <div class="chart-card"><div class="mini-head"><h4>Raw MODIS vs VIIRS</h4><button class="icon-btn" data-export="val-raw" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-raw" class="chart chart-sq"></div></div>
-          <div class="chart-card"><div class="mini-head"><h4>Harmonised MODIS vs VIIRS</h4><button class="icon-btn" data-export="val-harm" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-harm" class="chart chart-sq"></div></div>
-        </div>
-        <p class="hint" id="val-scatter-note"></p>
-        <div class="grid-2">
-          <div class="chart-card"><div class="mini-head"><h4>National monthly totals, test years</h4><button class="icon-btn" data-export="val-national" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-national" class="chart chart-md"></div></div>
-          <div class="chart-card"><div class="mini-head"><h4>VIIRS ÷ MODIS ratio by year</h4><button class="icon-btn" data-export="val-ratio" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-ratio" class="chart chart-md"></div></div>
-        </div>
-        <div class="chart-card"><div class="mini-head"><h4>Scaling ratio by 1° latitude band</h4><button class="icon-btn" data-export="val-bands" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-bands" class="chart chart-md"></div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <div>
-            <h3>Weekly FRP anomaly pipeline (<code>fire_harmonise.py</code>)</h3>
-            <p class="card-sub">The supplied upstream pipeline, unchanged: weekly fire radiative power per cell, VIIRS reference, z &gt; 3 on a log baseline</p>
-          </div>
-          <div class="segmented segmented-sm" role="radiogroup" aria-label="Validation dataset">
-            <label><input type="radio" name="frp-ds" value="real_weekly_frp" checked><span>Real</span></label>
-            <label><input type="radio" name="frp-ds" value="synthetic_weekly_frp"><span>Synthetic</span></label>
-          </div>
-        </div>
-        <div class="callout" id="frp-callout"></div>
-        <div class="metric-table-wrap" id="val-frp-table"></div>
-        <div class="grid-2">
-          <div class="chart-card"><div class="mini-head"><h4>Raw MODIS vs VIIRS FRP</h4><button class="icon-btn" data-export="frp-raw" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-frp-raw" class="chart chart-sq"></div></div>
-          <div class="chart-card"><div class="mini-head"><h4>Harmonised MODIS vs VIIRS FRP</h4><button class="icon-btn" data-export="frp-harm" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-frp-harm" class="chart chart-sq"></div></div>
-        </div>
-        <div class="chart-card">
-          <div class="mini-head">
-            <h4>Historical baseline for one cell</h4>
-            <div class="mini-actions">
-              <label class="inline-select">Cell <select id="frp-cell"></select></label>
-              <button class="icon-btn" data-export="frp-baseline" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
+            <div>
+              <h2>Historical comparison</h2>
+              <p class="card-sub" id="compare-sub">Same calendar month in every other complete year</p>
+            </div>
+            <div class="card-actions">
+              <button class="link-btn" id="btn-unfocus" type="button" hidden>Back to latest month</button>
+              <button class="icon-btn" data-export="compare" type="button" aria-label="Download comparison chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
             </div>
           </div>
-          <div id="chart-frp-baseline" class="chart chart-md"></div>
+          <div class="compare-summary" id="compare-summary" aria-live="polite"></div>
+          <div id="chart-compare" class="chart chart-md" role="img" aria-label="Bar chart of the same calendar month across years"></div>
         </div>
-      </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Anomalous months</h2>
+              <p class="card-sub">Robust modified z-score against the same month in other years · select one to compare</p>
+            </div>
+          </div>
+          <div id="anomaly-summary" class="anomaly-summary" aria-live="polite"></div>
+          <div class="anomaly-list-wrap"><ol class="anomaly-list" id="anomaly-list"></ol></div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="seasonal-title">
+        <div class="section-head">
+          <h2 id="seasonal-title">Seasons and trends</h2>
+          <p class="section-sub">Calculated from complete months in the selected period.</p>
+        </div>
+        <div class="two-col">
+          <div class="card chart-card">
+            <div class="card-head">
+              <div><h3>Average month</h3><p class="card-sub">Mean per calendar month · peak 3-month window highlighted</p></div>
+              <div class="card-actions"><button class="icon-btn" data-export="profile" type="button" aria-label="Download seasonal chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div>
+            </div>
+            <div id="chart-profile" class="chart chart-md" role="img" aria-label="Average activity per calendar month"></div>
+            <div class="season-bars" id="season-bars"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="card-head">
+              <div><h3>Annual totals</h3><p class="card-sub" id="annual-sub">Partial years are faded</p></div>
+              <div class="card-actions"><button class="icon-btn" data-export="annual" type="button" aria-label="Download annual chart as PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div>
+            </div>
+            <div id="chart-annual" class="chart chart-md" role="img" aria-label="Annual totals by year"></div>
+          </div>
+        </div>
+      </section>
     </section>
 
-    <!-- METHODOLOGY -->
-    <section class="section" id="methodology" aria-labelledby="method-title">
-      <div class="section-head">
-        <h2 id="method-title">Methodology and limitations</h2>
-        <p class="section-sub">What the numbers are, how they were made, and where they can mislead.</p>
+    <!-- ======================================================= VALIDATION -->
+    <section class="tab-panel" id="tab-validation" data-tab="validation" aria-labelledby="validation-title" hidden>
+      <div class="page-head page-head-compact">
+        <div>
+          <p class="eyebrow">Validation</p>
+          <h1 id="validation-title" tabindex="-1">Raw MODIS, raw VIIRS and the harmonised record</h1>
+          <p class="lede">How the two sensors differ, how MODIS is rescaled to VIIRS-equivalent units, and how well that holds up on years the ratios never saw.</p>
+        </div>
       </div>
-      <div class="method-grid" id="method-content"></div>
+
+      <section class="section" id="validation" aria-label="Validation">
+        <div class="explain-grid">
+          <div class="explain">
+            <span class="swatch" style="--c: var(--series-1)"></span>
+            <h3>Raw MODIS</h3>
+            <p>Terra (from 2000) and Aqua (from mid-2002), ~1 km pixels. Sees large, hot fires; misses many small ones. The only record before 2012.</p>
+          </div>
+          <div class="explain">
+            <span class="swatch" style="--c: var(--series-2)"></span>
+            <h3>Raw VIIRS S-NPP</h3>
+            <p>375 m pixels from 2012. Detects several times more fires than MODIS over the same area. Used as the reference sensor.</p>
+          </div>
+          <div class="explain">
+            <span class="swatch" style="--c: var(--series-3)"></span>
+            <h3>Harmonised</h3>
+            <p>One continuous series in VIIRS-equivalent units: VIIRS where available, MODIS × latitude-band ratio before. Never a sum of both sensors.</p>
+          </div>
+        </div>
+
+        <div class="card card-raised">
+          <div class="card-head">
+            <div>
+              <h2>Your selection: three versions of the record</h2>
+              <p class="card-sub" id="val-region-sub">Monthly hotspot counts for the current region and period</p>
+            </div>
+            <div class="card-actions"><button class="icon-btn" data-export="val-region" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div>
+          </div>
+          <div id="chart-val-region" class="chart chart-md" role="img" aria-label="Raw MODIS, raw VIIRS and harmonised monthly counts for the selection"></div>
+          <p class="hint" id="val-region-note"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>Monthly hotspot counts · real data holdout</h3>
+              <p class="card-sub" id="val-count-sub"></p>
+            </div>
+            <span class="badge badge-real">Real data · NASA FIRMS</span>
+          </div>
+          <div class="metric-table-wrap" id="val-count-table"></div>
+          <div class="grid-2">
+            <div class="chart-card"><div class="mini-head"><h4>Raw MODIS vs VIIRS</h4><button class="icon-btn" data-export="val-raw" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-raw" class="chart chart-sq"></div></div>
+            <div class="chart-card"><div class="mini-head"><h4>Harmonised MODIS vs VIIRS</h4><button class="icon-btn" data-export="val-harm" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-harm" class="chart chart-sq"></div></div>
+          </div>
+          <p class="hint" id="val-scatter-note"></p>
+          <div class="grid-2">
+            <div class="chart-card"><div class="mini-head"><h4>National monthly totals, test years</h4><button class="icon-btn" data-export="val-national" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-national" class="chart chart-md"></div></div>
+            <div class="chart-card"><div class="mini-head"><h4>VIIRS ÷ MODIS ratio by year</h4><button class="icon-btn" data-export="val-ratio" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-ratio" class="chart chart-md"></div></div>
+          </div>
+          <div class="chart-card"><div class="mini-head"><h4>Scaling ratio by 1° latitude band</h4><button class="icon-btn" data-export="val-bands" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-val-bands" class="chart chart-md"></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>Weekly FRP anomaly pipeline (<code>fire_harmonise.py</code>)</h3>
+              <p class="card-sub">The supplied upstream pipeline, unchanged: weekly fire radiative power per cell, VIIRS reference, z &gt; 3 on a log baseline</p>
+            </div>
+            <div class="segmented segmented-sm" role="radiogroup" aria-label="Validation dataset">
+              <label><input type="radio" name="frp-ds" value="real_weekly_frp" checked><span>Real</span></label>
+              <label><input type="radio" name="frp-ds" value="synthetic_weekly_frp"><span>Synthetic</span></label>
+            </div>
+          </div>
+          <div class="callout" id="frp-callout"></div>
+          <div class="metric-table-wrap" id="val-frp-table"></div>
+          <div class="grid-2">
+            <div class="chart-card"><div class="mini-head"><h4>Raw MODIS vs VIIRS FRP</h4><button class="icon-btn" data-export="frp-raw" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-frp-raw" class="chart chart-sq"></div></div>
+            <div class="chart-card"><div class="mini-head"><h4>Harmonised MODIS vs VIIRS FRP</h4><button class="icon-btn" data-export="frp-harm" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button></div><div id="chart-frp-harm" class="chart chart-sq"></div></div>
+          </div>
+          <div class="chart-card">
+            <div class="mini-head">
+              <h4>Historical baseline for one cell</h4>
+              <div class="mini-actions">
+                <label class="inline-select">Cell <select id="frp-cell"></select></label>
+                <button class="icon-btn" data-export="frp-baseline" type="button" aria-label="Download PNG" title="Download PNG"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></button>
+              </div>
+            </div>
+            <div id="chart-frp-baseline" class="chart chart-md"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ======================================================= METHODOLOGY -->
+    <section class="tab-panel" id="tab-methodology" data-tab="methodology" aria-labelledby="method-title" hidden>
+      <div class="page-head page-head-compact">
+        <div>
+          <p class="eyebrow">Methodology</p>
+          <h1 id="method-title" tabindex="-1">Methodology and limitations</h1>
+          <p class="lede">What the numbers are, how they were made, and where they can mislead.</p>
+        </div>
+      </div>
+      <section class="section" id="methodology" aria-label="Methodology">
+        <div class="method-grid" id="method-content"></div>
+      </section>
     </section>
   </main>
 
@@ -291,6 +349,10 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m9 4-5 2v14l5-2 6 2 5-2V4l-5 2-6-2Zm0 0v14m6-12v14"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 19 19 4M5 5v.01M9 9v.01M15 15v.01M19 19v.01M4 12h3m10 0h3"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15ZM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></symbol>
   </svg>
 
   <noscript><p class="noscript">HotSpot Sync needs JavaScript to load the data and draw the map and charts.</p></noscript>

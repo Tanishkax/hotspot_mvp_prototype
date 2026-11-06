@@ -9,6 +9,9 @@
 - Flow: FIRMS CSV → `build_dataset.py` → `manifest.json` + `cells.json` + `tiles/tYY_XXX.json` (5° tiles of 0.25° cells) → `DataStore` (cached fetch) → `selectCellsInTile` → `aggregateMonthly` → `buildSeries` → analytics → charts.
 - Pure modules (unit tested, no DOM): `site/js/analytics/*`, `geo/selection.js`, `data/schema.js`, `data/loader.js`, `export/csv.js` (except the download helpers).
 - DOM / chart modules: `ui/*`, `charts/*`, `main.js` (state + wiring). `window.hotspotSync` exposes `{state, ctx, charts}` for e2e tests. `ctx.renders` increments after each render.
+- **Tabs** (`ui/tabs.js`): four panels, Explore, Insights, Validation and Methodology, in one page. The URL is `#/<tab>?r=YYYY-MM,YYYY-MM&k=h|f&b=w,s,e,n` (or `&p=lon lat;…`) via `ui/hash.js`; legacy `#r=…` links open Explore. Tab links always carry the full state, so navigation is a plain hash change (`hashchange` → `goTab`), and Back/Forward work.
+- `render()` draws the shared chrome (context bar, tab links, downloads), then **only the active tab** (`renderExplore` / `renderInsights` / `renderValidation`). Switching tabs re-renders that tab, so charts never initialise at zero size. The map re-fits on `mapApi.refresh()` when Explore is shown, because a fit requested while hidden is deferred.
+- Content ownership (no duplication): Explore has the map, controls, KPIs, calendar and a month-in-context panel. Insights has the full comparison, anomalies, seasonal insights and annual trends. Validation has the sensor explainer, a raw-vs-harmonised chart for the selection, and the holdout and upstream FRP panels. Methodology has text from the manifest.
 
 ## Data definitions (do not blur these)
 

@@ -11,6 +11,8 @@ HotSpot Sync turns NASA FIRMS satellite fire detections from MODIS (Terra and Aq
 - inspect **harmonisation validation** on real data
 - **download** the results as CSV, GeoJSON or PNG
 
+The app has four tabs (**Explore**, **Insights**, **Validation**, **Methodology**) that share one selection. Every view has a shareable URL such as `#/insights?r=2012-02,2025-12&k=h&b=73.8,29.5,77.6,32.6`.
+
 It is a fully static site (HTML, CSS, vanilla ES modules, Leaflet, Leaflet.draw, Turf.js and Apache ECharts) built for GitHub Pages.
 
 > Target URL: `https://tanishkax.github.io/hotspot_mvp_prototype/`. It is live only once the Pages workflow below has run.

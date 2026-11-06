@@ -113,3 +113,31 @@ export function renderBaseline(el, cell, label) {
   }, { notMerge: true });
   return chart;
 }
+
+/** Selection-level comparison: raw MODIS, raw VIIRS and harmonised monthly counts on one axis (same unit). */
+export function renderRegionSensors(el, series, range) {
+  const chart = makeChart(el);
+  const pts = series.slice(range[0], range[1] + 1);
+  const labels = pts.map((p) => `${MONTH_SHORT[p.month - 1]} ${p.year}`);
+  const vStart = pts.findIndex((p) => p.source === 'V');
+  const line = (name, data, color, width = 1.6) => ({
+    type: 'line', name, data, symbol: 'none', connectNulls: false, lineStyle: { color, width }, itemStyle: { color },
+  });
+  chart.setOption({
+    animation: false, textStyle: { fontFamily: 'Inter, system-ui, sans-serif' },
+    grid: { left: 56, right: 14, top: 40, bottom: 56 },
+    legend: { top: 0, textStyle: { color: C.text2, fontSize: 11 }, itemWidth: 14, itemHeight: 3 },
+    tooltip: { ...tooltip, trigger: 'axis', valueFormatter: (v) => (v == null ? 'no data' : fmt(v)) },
+    dataZoom: [{ type: 'inside' }, { type: 'slider', height: 18, bottom: 8, borderColor: C.axis, textStyle: { color: C.muted }, fillerColor: 'rgba(255,166,48,0.12)', handleStyle: { color: C.accent } }],
+    xAxis: { type: 'category', data: labels, ...axis({ axisLabel: { color: C.text2, fontSize: 10, hideOverlap: true } }), splitLine: { show: false } },
+    yAxis: { type: 'value', name: 'hotspots / month', ...axis({ axisLabel: { color: C.text2, fontSize: 11, formatter: fmtCompact } }) },
+    series: [
+      { ...line('Harmonised', pts.map((p) => p.value), C.harm, 2.2), z: 3,
+        markLine: vStart > 0 ? { symbol: 'none', silent: true, lineStyle: { color: C.muted, width: 1, type: 'solid' },
+          label: { color: C.text2, fontSize: 10, formatter: 'VIIRS era begins', position: 'insideEndTop' }, data: [{ xAxis: vStart }] } : undefined },
+      line('Raw VIIRS S-NPP', pts.map((p) => (p.source == null || p.m < 0 ? null : (p.viirsRaw || (p.source === 'V' ? 0 : null)))), C.viirs),
+      line('Raw MODIS', pts.map((p) => p.modisRaw), C.modis),
+    ],
+  }, { notMerge: true });
+  return chart;
+}

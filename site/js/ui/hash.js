@@ -1,7 +1,9 @@
-// Shareable URL state: #r=YYYY-MM,YYYY-MM&k=h&b=w,s,e,n  or  &p=lon lat;lon lat;...
+// Shareable URL state: #/<tab>?r=YYYY-MM,YYYY-MM&k=h&b=w,s,e,n   or  ...&p=lon lat;lon lat;...
+// Legacy links without a tab path (#r=...&b=...) are still accepted and open the Explore tab.
+export const TABS = ['explore', 'insights', 'validation', 'methodology'];
 const r4 = (x) => Math.round(x * 1e4) / 1e4;
 
-export function encodeState({ range, metric, feature }, ymLabel) {
+export function encodeState({ tab = 'explore', range, metric, feature }, ymLabel) {
   const parts = [`r=${ymLabel(range[0])},${ymLabel(range[1])}`, `k=${metric}`];
   if (feature) {
     const ring = feature.geometry.coordinates[0];
@@ -12,13 +14,22 @@ export function encodeState({ range, metric, feature }, ymLabel) {
       parts.push(`p=${ring.slice(0, -1).map(([x, y]) => `${r4(x)} ${r4(y)}`).join(';')}`);
     }
   }
-  return `#${parts.join('&')}`;
+  return `#/${TABS.includes(tab) ? tab : 'explore'}?${parts.join('&')}`;
+}
+
+/** Split "#/tab?query" (or legacy "#query") into { tab, query }. */
+export function splitHash(hash) {
+  const h = String(hash || '').replace(/^#/, '');
+  const m = /^\/([a-z]+)\/?(?:\?(.*))?$/.exec(h);
+  if (m) return { tab: TABS.includes(m[1]) ? m[1] : 'explore', query: m[2] || '' };
+  return { tab: 'explore', query: h };
 }
 
 /** Returns a partial state; invalid pieces are ignored (validated by the caller). */
 export function decodeState(hash) {
-  const out = {};
-  const params = new URLSearchParams(String(hash).replace(/^#/, ''));
+  const { tab, query } = splitHash(hash);
+  const out = { tab };
+  const params = new URLSearchParams(query);
   const r = params.get('r');
   if (r && /^\d{4}-\d{2},\d{4}-\d{2}$/.test(r)) out.range = r.split(',');
   const k = params.get('k');

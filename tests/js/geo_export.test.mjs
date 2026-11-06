@@ -132,3 +132,26 @@ test('DataStore caches tiles and retries after failure', async () => {
   assert.equal(a, b);
   assert.equal(calls, 2);
 });
+
+test('URL state: tab path round-trips and legacy hashes still decode', async () => {
+  const { encodeState, decodeState, splitHash } = await import('../../site/js/ui/hash.js');
+  const ym = (m) => `${2000 + Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}`;
+  const f = bboxToFeature([73.8, 29.5, 77.6, 32.6]);
+  const h = encodeState({ tab: 'insights', range: [12, 23], metric: 'f', feature: f }, ym);
+  assert.equal(h, '#/insights?r=2001-01,2001-12&k=f&b=73.8,29.5,77.6,32.6');
+  const d = decodeState(h);
+  assert.equal(d.tab, 'insights');
+  assert.deepEqual(d.range, ['2001-01', '2001-12']);
+  assert.equal(d.metric, 'f');
+  assert.deepEqual(d.bbox, [73.8, 29.5, 77.6, 32.6]);
+  // legacy (pre-tabs) links open Explore with their selection
+  const legacy = decodeState('#r=2015-01,2025-12&k=h&b=73.8,29.5,77.6,32.6');
+  assert.equal(legacy.tab, 'explore');
+  assert.deepEqual(legacy.bbox, [73.8, 29.5, 77.6, 32.6]);
+  // unknown tabs fall back to explore; polygons round-trip
+  assert.equal(splitHash('#/nope?k=h').tab, 'explore');
+  const poly = parsePolygonText('20, 75\n20, 80\n25, 75').feature;
+  const back = decodeState(encodeState({ tab: 'validation', range: [0, 1], metric: 'h', feature: poly }, ym));
+  assert.deepEqual(back.ring, [[75, 20], [80, 20], [75, 25]]);
+  assert.equal(encodeState({ range: [0, 0], metric: 'h', feature: null }, ym), '#/explore?r=2000-01,2000-01&k=h');
+});

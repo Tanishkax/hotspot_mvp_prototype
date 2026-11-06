@@ -7,6 +7,7 @@ import { keyStats } from './analytics/summary.js';
 import { MONTH_SHORT, indexToYM, labelYM, normaliseRange, parseYM, ymToIndex } from './analytics/time.js';
 import { renderCalendar } from './charts/calendar.js';
 import { renderAnnual, renderComparison, renderProfile } from './charts/insight-charts.js';
+import { renderRegionSensors } from './charts/validation.js';
 import { exportPNG } from './charts/theme.js';
 import { CONFIG, METRICS } from './config.js';
 import { DataStore } from './data/loader.js';
@@ -14,11 +15,12 @@ import { AGGREGATE_HEADERS, CELL_HEADERS, aggregateRows, cellRows, downloadText,
 import {
   areaKm2, bboxToFeature, geometryBBox, parsePolygonText, selectCellsInTile, tilesForBBox, validateBounds,
 } from './geo/selection.js';
-import { decodeState, encodeState } from './ui/hash.js';
+import { decodeState, encodeState, splitHash } from './ui/hash.js';
+import { showTab, updateTabLinks } from './ui/tabs.js';
 import { createMap } from './ui/map.js';
 import { renderMethodology } from './ui/methodology.js';
 import {
-  renderAnomalies, renderComparisonSummary, renderKPIs, renderSeasonal, renderTable,
+  renderAnomalies, renderComparisonSummary, renderContextBar, renderKPIs, renderMonthDetail, renderSeasonal, renderTable,
 } from './ui/render.js';
 import { initValidation } from './ui/validation-panel.js';
 
@@ -34,7 +36,7 @@ const PRESETS = [
   { key: 'deccan', label: 'Telangana–AP', bbox: [77.0, 13.5, 81.8, 19.9] },
 ];
 
-const state = { feature: null, range: null, metric: 'h', focusM: null, preset: 'india' };
+const state = { tab: 'explore', feature: null, range: null, metric: 'h', focusM: null, preset: 'india' };
 const ctx = { renders: 0, manifest: null, cells: null, tiles: [], masks: new Map(), series: {}, scores: {}, nCells: 0, token: 0 };
 const charts = {};
 let mapApi = null;
@@ -135,25 +137,44 @@ function setOverlay(msg) {
 }
 
 // ---------------------------------------------------------------- rendering
+/** Render shared chrome, then only the visible tab (hidden tabs render when shown). */
 function render() {
+  const m = metric();
+  history.replaceState(null, '', encodeState(state, ymLabel));
+  updateTabLinks((tab) => encodeState({ ...state, tab }, ymLabel));
+  renderContextBar({
+    region: regionText(state.feature), period: `${labelYM(state.range[0], ctx.manifest.base_year)} – ${labelYM(state.range[1], ctx.manifest.base_year)}`,
+    metric: m.label.replace('Harmonised ', ''), cells: ctx.nCells,
+  });
+  updateDownloadState();
+  ({ explore: renderExplore, insights: renderInsights, validation: renderValidation, methodology: () => {} })[state.tab]();
+  ctx.renders += 1;
+}
+
+function regionText(feature) {
+  if (!feature) return 'All of India';
+  const preset = PRESETS.find((p) => p.key === state.preset && p.bbox);
+  if (preset) return preset.label;
+  const [w, s, e, n] = geometryBBox(feature);
+  return `${feature.properties.kind === 'rectangle' ? 'Box' : 'Polygon'} ${s.toFixed(1)}–${n.toFixed(1)}°N, ${w.toFixed(1)}–${e.toFixed(1)}°E`;
+}
+
+function emptyMessage() {
+  return 'No grid cell with fire detections has its centre inside this selection. Draw a larger area or clear the selection.';
+}
+
+function renderExplore() {
   const m = metric();
   const series = ctx.series[state.metric];
   const scores = ctx.scores[state.metric];
   const range = state.range;
   const unit = m.unit;
-  history.replaceState(null, '', encodeState(state, ymLabel));
-  $('calendar-sub').textContent = `${m.label} per month, ${labelYM(range[0], ctx.manifest.base_year)} – ${labelYM(range[1], ctx.manifest.base_year)}. Click a month to compare it with its history.`;
-  $('annual-sub').textContent = `${m.label} per year · partial years faded · colour shows the source sensor`;
-
+  $('calendar-sub').textContent = `${m.label} per month, ${labelYM(range[0], ctx.manifest.base_year)} – ${labelYM(range[1], ctx.manifest.base_year)}. Click a month to see it in context.`;
   if (!ctx.nCells) {
-    setOverlay('No grid cell with fire detections has its centre inside this selection. Draw a larger area or clear the selection.');
+    setOverlay(emptyMessage());
     renderKPIs(null, {});
-    for (const c of ['calendar', 'compare', 'profile', 'annual']) if (charts[c]) charts[c].clear();
-    renderComparisonSummary(null);
-    $('anomaly-summary').innerHTML = '';
-    $('anomaly-list').innerHTML = '<li class="empty-state" style="display:block">No data for this selection.</li>';
-    $('seasonal-insights').innerHTML = '';
-    $('season-bars').innerHTML = '';
+    if (charts.calendar) charts.calendar.clear();
+    renderMonthDetail($('month-detail'), null);
     $('calendar-table').innerHTML = '';
     return;
   }
@@ -161,13 +182,40 @@ function render() {
   renderKPIs(keyStats(series, range), { metricLabel: m.short === 'FRP' ? 'FRP' : 'hotspots', unit, coverageEnd: ctx.manifest.coverage.end });
   charts.calendar = renderCalendar($('chart-calendar'), {
     series, scores, range, metric: state.metric, unit, focusM: state.focusM,
-    onSelect: (mm) => { state.focusM = mm; render(); $('insights').scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+    onSelect: (mm) => { state.focusM = mm; render(); },
   });
+  const cmp = compareToHistory(series, range, state.focusM);
+  renderMonthDetail($('month-detail'), cmp, cmp.target ? scores[cmp.target.m] : null, unit, {
+    insightsHref: encodeState({ ...state, tab: 'insights' }, ymLabel),
+    onReset: state.focusM != null ? () => { state.focusM = null; render(); } : null,
+  });
+  if ($('calendar-table').closest('details').open) renderTable(series, scores, range, unit);
+}
+
+function renderInsights() {
+  const m = metric();
+  const series = ctx.series[state.metric];
+  const scores = ctx.scores[state.metric];
+  const range = state.range;
+  const unit = m.unit;
+  $('annual-sub').textContent = `${m.label} per year · partial years faded · colour shows the source sensor`;
+  if (!ctx.nCells) {
+    for (const c of ['compare', 'profile', 'annual']) if (charts[c]) charts[c].clear();
+    renderComparisonSummary(null);
+    $('anomaly-summary').innerHTML = '';
+    $('anomaly-list').innerHTML = `<li class="empty-state" style="display:block">${emptyMessage()}</li>`;
+    $('seasonal-insights').innerHTML = '';
+    $('season-bars').innerHTML = '';
+    return;
+  }
   const cmp = compareToHistory(series, range, state.focusM);
   renderComparisonSummary(cmp, unit, ctx.manifest.base_year);
   charts.compare = renderComparison($('chart-compare'), cmp, unit);
-  renderAnomalies(series, scores, range, unit, (mm) => { state.focusM = mm; render(); });
-
+  renderAnomalies(series, scores, range, unit, (mm) => {
+    state.focusM = mm;
+    render();
+    $('insights').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   const { profile } = monthlyProfile(series, range);
   const peak = peakWindow(profile, 3);
   const annual = annualTotals(series, range);
@@ -180,9 +228,19 @@ function render() {
   renderSeasonal({ profile, seasons: seasonShares(profile), peak, annual, trend, topAnomaly }, unit);
   charts.profile = renderProfile($('chart-profile'), profile, peak, unit);
   charts.annual = renderAnnual($('chart-annual'), annual, trend, unit);
-  if ($('calendar-table').closest('details').open) renderTable(series, scores, range, unit);
-  updateDownloadState();
-  ctx.renders += 1;
+}
+
+function renderValidation() {
+  const series = ctx.series.h;
+  const range = state.range;
+  $('val-region-sub').textContent = `Monthly hotspot counts · ${regionText(state.feature)} · ${labelYM(range[0], ctx.manifest.base_year)} – ${labelYM(range[1], ctx.manifest.base_year)}`;
+  if (!ctx.nCells) {
+    if (charts.region) charts.region.clear();
+    $('val-region-note').textContent = emptyMessage();
+    return;
+  }
+  charts.region = renderRegionSensors($('chart-val-region'), series, range);
+  $('val-region-note').textContent = 'Raw MODIS sits far below VIIRS wherever both exist; the harmonised line follows VIIRS from its first complete month and scaled MODIS before it. Gaps in raw VIIRS before 2012 are "no data", not zero.';
 }
 
 // ---------------------------------------------------------------- controls
@@ -336,8 +394,8 @@ function heroFacts() {
     <div><dt>Harmonised hotspots</dt><dd>${total ? `${(total / 1e6).toFixed(1)}M` : '—'}</dd></div>`;
 }
 
-function restoreFromHash() {
-  const s = decodeState(window.location.hash);
+function restoreFromHash(hash = window.location.hash) {
+  const s = decodeState(hash);
   const base = ctx.manifest.base_year;
   const [lo, hi] = coverageRange();
   let range = [lo, hi];
@@ -356,7 +414,29 @@ function restoreFromHash() {
     const r = parsePolygonText(s.ring.map(([x, y]) => `${y}, ${x}`).join('\n'));
     if (r.ok) feature = r.feature;
   }
-  return { range, feature };
+  return { range, feature, tab: s.tab };
+}
+
+/** Switch tab (re-rendering it) without touching the selection. */
+function goTab(tab, { focus = false } = {}) {
+  state.tab = showTab(tab, { focus });
+  if (state.tab === 'explore' && mapApi) mapApi.refresh();
+  if (ctx.series.h) render();
+}
+
+function initNavigation() {
+  // Links carry the full state, so a plain hash navigation is enough. Back/forward also land here.
+  window.addEventListener('hashchange', () => {
+    const { tab } = splitHash(window.location.hash);
+    const sameSelection = window.location.hash === encodeState({ ...state, tab }, ymLabel);
+    const wanted = sameSelection ? null : restoreFromHash(); // read before render() rewrites the URL
+    goTab(tab, { focus: true });
+    if (wanted) {
+      document.querySelector(`input[name="metric"][value="${state.metric}"]`).checked = true;
+      setRange(wanted.range, true);
+      applySelection(wanted.feature, { fit: true });
+    }
+  });
 }
 
 async function main() {
@@ -378,12 +458,14 @@ async function main() {
   initRangeControls();
   initSelectionControls();
   initExports();
-  const { range, feature } = restoreFromHash();
+  const { range, feature, tab } = restoreFromHash();
+  state.tab = showTab(tab, { scroll: false });
   setRange(range, true);
   heroFacts();
+  initNavigation();
   await applySelection(feature, { fit: !!feature });
   initValidation(store, man);
-  window.hotspotSync = { state, ctx, charts }; // debugging & e2e tests
+  window.hotspotSync = { state, ctx: Object.assign(ctx, { mapApi }), charts }; // debugging & e2e tests
 }
 
 main();

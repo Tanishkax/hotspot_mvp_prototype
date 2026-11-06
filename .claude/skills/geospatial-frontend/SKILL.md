@@ -11,5 +11,6 @@ description: Use when working on HotSpot Sync's map, drawing tools, region selec
 - **Loading.** `tilesForBBox(manifest.tiles, bbox)` → `DataStore.tiles()` (promise cache, retries after failure). Guard races with `ctx.token`.
 - **Map cell layer.** Draws `cells.json` as canvas rectangles. `highlight(mask)` takes a mask over `cells.json` order (computed with the same `selectCellsInTile`).
 - **Validation.** `validateBounds` (numeric, ordered, overlaps the India extent). Polygons need ≥ 3 vertices, and `turf.kinks` rejects self-intersections.
-- **URL hash.** `#r=YYYY-MM,YYYY-MM&k=h|f&b=w,s,e,n` or `&p=lon lat;...`. Decoded values are re-validated.
+- **URL hash.** `#/<tab>?r=YYYY-MM,YYYY-MM&k=h|f&b=w,s,e,n` or `&p=lon lat;...`. Legacy hashes without `/<tab>` open Explore. Decoded values are re-validated.
+- **Hidden tabs.** The map lives in the Explore panel. Any fit requested while it is hidden (`clientWidth === 0`) is deferred, and `mapApi.refresh()` applies it when Explore is shown. Always call `refresh()` after unhiding the map.
 - **Tests.** Add pure cases to `tests/js/geo_export.test.mjs`, including a swapped-order check. Mouse drawing is covered in `tests/e2e/smoke.mjs`.

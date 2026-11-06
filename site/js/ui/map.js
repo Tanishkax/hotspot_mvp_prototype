@@ -18,7 +18,9 @@ function showIndia(map) {
 
 export function createMap(el, { onSelection, cells, grid }) {
   // whole zoom levels only: fractional zoom scales tiles and shows hairline seams
+  let lastFeature = null; // last selection, re-fitted when the map first becomes visible (created in a hidden tab)
   const map = L.map(el, { zoomSnap: 1, minZoom: 3, maxZoom: 12, worldCopyJump: false, preferCanvas: true });
+  let pendingFit = el.clientWidth === 0; // a fit requested while the map is hidden is applied when it is shown
   showIndia(map);
   // Key-free basemaps. Esri dark grey canvas (base + labels) is the default; OpenStreetMap is an alternative.
   const esriAttr = 'Basemap &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors · Fire data NASA FIRMS';
@@ -87,20 +89,24 @@ export function createMap(el, { onSelection, cells, grid }) {
   map.on(L.Draw.Event.CREATED, (e) => {
     drawn.clearLayers();
     drawn.addLayer(e.layer);
-    onSelection(toFeature(e.layer), 'draw');
+    lastFeature = toFeature(e.layer);
+    onSelection(lastFeature, 'draw');
   });
   map.on(L.Draw.Event.EDITED, () => {
     const layers = drawn.getLayers();
-    onSelection(layers.length ? toFeature(layers[0]) : null, 'draw');
+    lastFeature = layers.length ? toFeature(layers[0]) : null;
+    onSelection(lastFeature, 'draw');
   });
   map.on(L.Draw.Event.DELETED, () => {
-    if (!drawn.getLayers().length) onSelection(null, 'draw');
+    if (!drawn.getLayers().length) { lastFeature = null; onSelection(null, 'draw'); }
   });
 
   return {
     map,
     /** Show a GeoJSON selection (from presets, forms or URL). null clears. */
     show(feature, fit = true) {
+      lastFeature = feature;
+      if (fit && el.clientWidth === 0) pendingFit = true;
       drawn.clearLayers();
       if (!feature) { if (fit) showIndia(map); return; }
       const latlngs = feature.geometry.coordinates[0].slice(0, -1).map(([lon, lat]) => [lat, lon]);
@@ -111,6 +117,17 @@ export function createMap(el, { onSelection, cells, grid }) {
         const [w, s, e, n] = geometryBBox(feature);
         map.fitBounds([[s, w], [n, e]], { padding: [30, 30], maxZoom: 9 });
       }
+    },
+    /** Call after the map's container becomes visible again (tab switch): fixes size and initial view. */
+    refresh() {
+      if (el.clientWidth === 0) return;
+      map.invalidateSize({ pan: false });
+      if (!pendingFit) return;
+      pendingFit = false;
+      if (lastFeature) {
+        const [w, s, e, n] = geometryBBox(lastFeature);
+        map.fitBounds([[s, w], [n, e]], { padding: [30, 30], maxZoom: 9 });
+      } else showIndia(map);
     },
     /** Emphasise selected cells; mask is a boolean array aligned with cells.id (null = all). */
     highlight(mask) {

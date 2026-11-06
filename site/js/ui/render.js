@@ -171,3 +171,65 @@ export function metricsTable(levels, labels) {
   }
   return `<table class="metric-table"><thead>${head}</thead><tbody>${rows.join('')}</tbody></table>`;
 }
+
+export function renderContextBar({ region, period, metric, cells }) {
+  $('ctx-region').textContent = region;
+  $('ctx-period').textContent = period;
+  $('ctx-metric').textContent = metric;
+  $('ctx-cells').textContent = cells == null ? '—' : cells.toLocaleString('en-US');
+}
+
+const STATUS_TEXT = {
+  high: ['▲ Unusually high', 'st-high'], low: ['▼ Unusually low', 'st-low'], normal: ['Within normal range', 'st-normal'],
+  insufficient: ['Not scored · too little history', 'st-muted'], incomplete: ['Not scored · incomplete month', 'st-muted'],
+  lowconf: ['Not scored · Terra-only estimate', 'st-muted'],
+};
+
+/** Compact "this month vs its history" panel beside the calendar. */
+export function renderMonthDetail(el, cmp, score, unit, { insightsHref, onReset } = {}) {
+  if (!cmp || cmp.status === 'none') {
+    el.innerHTML = '<p class="md-eyebrow">Month in context</p><p class="empty-state">No complete month with data in this selection and period.</p>';
+    return;
+  }
+  const t = cmp.target;
+  const [stText, stCls] = STATUS_TEXT[score ? score.status : 'insufficient'] || STATUS_TEXT.insufficient;
+  const ok = cmp.status === 'ok';
+  const dir = ok ? (cmp.direction === 'above' ? 'up' : cmp.direction === 'below' ? 'down' : '') : '';
+  // dot strip of the same calendar month in other years (log1p positions: counts are skewed)
+  let strip = '';
+  if (cmp.refs.length) {
+    const vals = [...cmp.refs.map((r) => r.value), t.value];
+    const lo = Math.log1p(Math.min(...vals)); const hi = Math.log1p(Math.max(...vals));
+    const pos = (v) => (hi > lo ? (100 * (Math.log1p(v) - lo)) / (hi - lo) : 50);
+    strip = `<div class="md-strip" role="img" aria-label="${MONTH_LONG[t.month - 1]} in ${cmp.n} other years: target at ${fmt(t.value)}${ok ? `, median ${fmt(cmp.median)}` : ''}">
+      <div class="md-track"></div>
+      ${cmp.refs.map((r) => `<span class="md-dot" style="left:${pos(r.value)}%" title="${r.year}: ${fmt(r.value)}"></span>`).join('')}
+      ${ok ? `<span class="md-median" style="left:${pos(cmp.median)}%" title="median ${fmt(cmp.median)}"></span>` : ''}
+      <span class="md-target" style="left:${pos(t.value)}%" title="${t.year}: ${fmt(t.value)}"></span>
+    </div><div class="md-strip-legend"><span><i class="k-dot"></i>other years</span><span><i class="k-med"></i>median</span><span><i class="k-target"></i>${t.year}</span></div>`;
+  }
+  const notes = [];
+  if (cmp.skipped.length) notes.push(`${cmp.skipped.map((p) => `${MONTH_SHORT[p.month - 1]} ${p.year}`).join(', ')} incomplete — showing the latest complete month.`);
+  if (!cmp.targetComplete) notes.push(`Incomplete month (${t.missingDays} outage days): likely an undercount.`);
+  if (cmp.status === 'insufficient') notes.push(`Only ${cmp.n} comparable years (≥ ${CONFIG.comparison.minRefYears} needed for a median).`);
+  el.innerHTML = `
+    <p class="md-eyebrow">${cmp.focused ? 'Selected month' : 'Latest month in period'}</p>
+    <h3 class="md-title">${MONTH_LONG[t.month - 1]} ${t.year}</h3>
+    <p class="md-value">${fmt(t.value)}<small>${unit}</small></p>
+    <span class="status-pill ${stCls}">${stText}${score && score.z != null ? ` · z ${score.z > 0 ? '+' : ''}${score.z.toFixed(1)}` : ''}</span>
+    <dl class="md-stats">
+      <div><dt>Median ${MONTH_SHORT[t.month - 1]}</dt><dd>${ok ? fmt(cmp.median) : '—'}</dd></div>
+      <div><dt>Difference</dt><dd class="${dir}">${ok ? `${cmp.diff > 0 ? '+' : ''}${fmt(cmp.diff)}` : '—'}</dd></div>
+      <div><dt>Change</dt><dd class="${dir}">${ok ? (cmp.pct == null ? 'n/a' : fmtPct(cmp.pct)) : '—'}</dd></div>
+      <div><dt>Rank</dt><dd>${ok ? rankText(cmp) : '—'}</dd></div>
+    </dl>
+    ${strip}
+    <p class="md-source">${SRC[t.source] || ''} · ${cmp.n} reference years</p>
+    ${notes.map((n) => `<p class="notice">${esc(n)}</p>`).join('')}
+    <div class="md-actions">
+      ${insightsHref ? `<a class="btn btn-ghost" data-tab-link="insights" href="${insightsHref}">Full comparison &amp; anomalies →</a>` : ''}
+      ${onReset ? '<button class="link-btn" type="button" data-md-reset>Back to latest month</button>' : ''}
+    </div>`;
+  const reset = el.querySelector('[data-md-reset]');
+  if (reset) reset.addEventListener('click', onReset);
+}

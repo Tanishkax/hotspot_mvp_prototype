@@ -29,6 +29,11 @@ const check = (cond, msg) => { if (!cond) { failures.push(msg); console.log(`  F
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkqGcAAAIOAQXz3cD/AAAAAElFTkSuQmCC', 'base64');
 
 const browser = await chromium.launch();
+async function gotoTab(page, tab) {
+  const before = await page.evaluate(() => window.hotspotSync.ctx.renders);
+  await page.click(`#tabs .tab[data-tab="${tab}"]`);
+  await page.waitForFunction(([t, n]) => window.hotspotSync.state.tab === t && window.hotspotSync.ctx.renders > n, [tab, before]);
+}
 try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await ctx.newPage();
@@ -72,9 +77,20 @@ try {
   check(nPunjab > 50 && nPunjab < 300, `Punjab box selects ${nPunjab} cells`);
   const peak = await page.locator('#kpis .kpi:nth-child(2) .k-value').innerText();
   check(/Oct|Nov|Apr|May/.test(peak), `Punjab peak month is a crop-residue month (${peak})`);
+  check(/median/i.test(await page.locator('#month-detail').innerText()), 'Explore month-in-context panel shows median');
+  await gotoTab(page, 'insights');
+  check(await page.locator('#tab-explore').isHidden() && await page.locator('#tab-insights').isVisible(), 'Insights tab shows only its panel');
+  check(/Punjab/.test(await page.locator('#ctx-region').innerText()), 'context bar keeps the region across tabs');
+  check(/#\/insights\?.*b=73\.8,29\.5,77\.6,32\.6/.test(page.url()), 'URL carries tab and selection');
   check(/median/i.test(await page.locator('#compare-summary').innerText()), 'comparison summary shows median');
   check(await page.locator('#seasonal-insights .insight').count() === 3, 'seasonal insights rendered');
   check(/account for \d+%/.test(await page.locator('#seasonal-insights').innerText()), 'critical period sentence computed');
+  const fillW = await page.locator('#season-bars .fill').first().evaluate((e) => e.getBoundingClientRect().width);
+  check(fillW > 0 || /0%/.test(await page.locator('#season-bars').innerText()), 'season bars have visible fills');
+  await page.goBack();
+  await page.waitForFunction(() => window.hotspotSync.state.tab === 'explore');
+  check(await page.locator('#tab-explore').isVisible(), 'browser Back returns to the Explore tab');
+  check(await page.evaluate(() => window.hotspotSync.state.preset === 'punjab' || !!window.hotspotSync.state.feature), 'selection survives Back');
   if (shotsDir) await page.locator('#calendar').screenshot({ path: `${shotsDir}/calendar-punjab.png` });
 
   console.log('Manual bounds');
@@ -145,7 +161,12 @@ try {
   await page.waitForTimeout(500);
   const focus = await page.evaluate(() => window.hotspotSync.state.focusM);
   check(focus === (2010 - 2000) * 12 + 2, `clicking calendar focuses Mar 2010 (m=${focus})`);
-  check(/March 2010/.test(await page.locator('#compare-sub').innerText()), 'comparison follows the clicked month');
+  check(/March 2010/.test(await page.locator('#month-detail').innerText()), 'month panel follows the clicked month');
+  await page.click('#month-detail a[data-tab-link="insights"]');
+  await page.waitForFunction(() => window.hotspotSync.state.tab === 'insights');
+  await page.waitForTimeout(200);
+  check(/March 2010/.test(await page.locator('#compare-sub').innerText()), 'Insights comparison follows the clicked month');
+  await gotoTab(page, 'explore');
 
   console.log('Exports');
   const [dl1] = await Promise.all([page.waitForEvent('download'), page.click('#dl-monthly')]);
@@ -168,7 +189,9 @@ try {
   check(gj.features[0].geometry.coordinates[0][0][0] > 60, 'GeoJSON uses [lon, lat]');
 
   console.log('Validation section');
-  await page.locator('#validation').scrollIntoViewIfNeeded();
+  await gotoTab(page, 'validation');
+  const regionSeries = await page.evaluate(() => echarts.getInstanceByDom(document.getElementById('chart-val-region')).getOption().series.map((x) => x.name));
+  check(regionSeries.join('|') === 'Harmonised|Raw VIIRS S-NPP|Raw MODIS', 'selection sensor chart shows raw MODIS, raw VIIRS and harmonised');
   await page.waitForFunction(() => {
     const c = document.getElementById('chart-frp-baseline');
     return c && echarts.getInstanceByDom(c) && echarts.getInstanceByDom(c).getOption().series.length === 5;
@@ -186,6 +209,26 @@ try {
   check(badRequests.length === 0, `no failed requests${badRequests.length ? `: ${badRequests.slice(0, 3).join(' | ')}` : ''}`);
   const perf = await page.evaluate(() => ({ heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null, bytes: window.hotspotSync.ctx && null }));
   console.log(`  JS heap ${perf.heap} MB`);
+
+  console.log('Deep link to a non-default tab');
+  const dctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const dp = await dctx.newPage();
+  const derr = [];
+  dp.on('pageerror', (e) => derr.push(String(e)));
+  await dp.route(/arcgisonline\.com|tile\.openstreetmap\.org/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
+  await dp.goto(`${base}#/validation?r=2012-02,2025-12&k=f&b=81.3,17.8,87.5,22.6`);
+  await dp.waitForFunction(() => window.hotspotSync && window.hotspotSync.ctx.renders > 0 && window.hotspotSync.state.feature, null, { timeout: 30000 });
+  check(await dp.locator('#tab-validation').isVisible(), 'deep link opens the Validation tab');
+  check(await dp.locator('input[name=metric][value=f]').isChecked(), 'deep link restores the metric');
+  await gotoTab(dp, 'explore');
+  await dp.waitForTimeout(400);
+  const centred = await dp.evaluate(() => {
+    const m = window.hotspotSync.ctx.mapApi.map; const c = m.getCenter(); const sz = m.getSize();
+    return sz.x > 0 && c.lat > 17.8 && c.lat < 22.6 && c.lng > 81.3 && c.lng < 87.5;
+  });
+  check(centred, 'map created in a hidden tab is sized and centred on the selection when shown');
+  check(derr.length === 0, 'no page errors on deep link');
+  await dctx.close();
 
   console.log('Mobile');
   const mctx = await browser.newContext({ ...require('playwright').devices['iPhone 13'] });
