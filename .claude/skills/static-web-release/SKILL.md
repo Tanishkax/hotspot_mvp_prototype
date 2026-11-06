@@ -6,7 +6,7 @@ description: Use when preparing, testing or deploying the HotSpot Sync static si
 # Static web release
 
 1. **Paths.** Everything is relative (`./data/`, `vendor/…`, `assets/…`). Never use a leading `/`. The e2e test serves `site/` under `/hotspot_mvp_prototype/` to catch path bugs. `site/.nojekyll` must exist.
-2. **Dependencies.** Libraries are vendored and pinned: Leaflet 1.9.4, Leaflet.draw 1.0.4, ECharts 5.6.0, Turf 7.2.0, plus woff2 fonts. To upgrade, `npm pack <pkg>@<ver>` and copy `dist` files. No CDN is needed at runtime except CARTO basemap tiles.
+2. **Dependencies.** Libraries are vendored and pinned: Leaflet 1.9.4, Leaflet.draw 1.0.4, ECharts 5.6.0, Turf 7.2.0, plus woff2 fonts. To upgrade, `npm pack <pkg>@<ver>` and copy `dist` files. No CDN is needed at runtime except basemap tiles (Esri dark grey canvas, OpenStreetMap; no API key). CARTO tiles now show an "API key required" watermark, so do not use them.
 3. **Checks before release.**
    - `npm test && python3 -m pytest -q tests/python && node tests/e2e/smoke.mjs --shots <dir>`
    - The e2e test asserts: no console errors or failed requests, all interactions, CSV and PNG downloads, no horizontal scroll on iPhone 13, and hash restore.

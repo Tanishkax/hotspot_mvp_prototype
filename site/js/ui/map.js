@@ -8,10 +8,19 @@ const INDIA_VIEW = [[6.5, 68], [35.5, 97.5]];
 export function createMap(el, { onSelection, cells, grid }) {
   const map = L.map(el, { zoomSnap: 0.25, minZoom: 3, maxZoom: 12, worldCopyJump: false, preferCanvas: true });
   map.fitBounds(INDIA_VIEW);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Fire data NASA FIRMS',
-  }).addTo(map);
+  // Key-free basemaps. Esri dark grey canvas (base + labels) is the default; OpenStreetMap is an alternative.
+  const esriAttr = 'Basemap &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors · Fire data NASA FIRMS';
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex = 450;          // above hotspot cells, below drawn shapes' handles
+  map.getPane('labels').style.pointerEvents = 'none'; // never block drawing or clicks
+  const dark = L.layerGroup([
+    L.tileLayer(`${esri}World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, attribution: esriAttr }),
+    L.tileLayer(`${esri}World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, pane: 'labels', opacity: 0.9 }),
+  ]).addTo(map);
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Fire data NASA FIRMS',
+  });
 
   // Hotspot cells (0.25 deg), coloured by mean annual harmonised hotspots (log scale).
   const renderer = L.canvas({ padding: 0.3 });
@@ -30,7 +39,7 @@ export function createMap(el, { onSelection, cells, grid }) {
   cellLayer.addTo(map);
 
   const drawn = new L.FeatureGroup().addTo(map);
-  L.control.layers(null, { 'Hotspot cells (mean annual)': cellLayer }, { position: 'topright', collapsed: true }).addTo(map);
+  L.control.layers({ 'Dark (Esri)': dark, 'Streets (OpenStreetMap)': osm }, { 'Hotspot cells (mean annual)': cellLayer }, { position: 'topright', collapsed: true }).addTo(map);
   map.addControl(new L.Control.Draw({
     position: 'topleft',
     draw: {

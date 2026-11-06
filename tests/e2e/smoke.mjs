@@ -36,9 +36,9 @@ try {
   const badRequests = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('requestfailed', (r) => { if (!r.url().includes('basemaps.cartocdn.com')) badRequests.push(`${r.url()} ${r.failure()?.errorText}`); });
+  page.on('requestfailed', (r) => { if (!/arcgisonline\.com|openstreetmap\.org/.test(r.url())) badRequests.push(`${r.url()} ${r.failure()?.errorText}`); });
   page.on('response', (r) => { if (r.status() >= 400) badRequests.push(`${r.status()} ${r.url()}`); });
-  await page.route(/basemaps\.cartocdn\.com/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
+  await page.route(/arcgisonline\.com|tile\.openstreetmap\.org/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
 
   console.log('Load');
   const t0 = Date.now();
@@ -192,7 +192,7 @@ try {
   const mp = await mctx.newPage();
   const merr = [];
   mp.on('pageerror', (e) => merr.push(String(e)));
-  await mp.route(/basemaps\.cartocdn\.com/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
+  await mp.route(/arcgisonline\.com|tile\.openstreetmap\.org/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
   await mp.goto(`${base}#r=2015-01,2025-12&k=h&b=73.8,29.5,77.6,32.6`);
   await mp.waitForFunction(() => window.hotspotSync && window.hotspotSync.ctx.renders > 0 && window.hotspotSync.state.feature, null, { timeout: 30000 });
   await mp.waitForTimeout(500);

@@ -75,5 +75,5 @@ See [`docs/methodology.md`](docs/methodology.md) for full details and limitation
 
 ## Credits
 
-- Fire data: NASA FIRMS (MODIS C6.1, VIIRS 375 m). Basemap © OpenStreetMap contributors © CARTO.
+- Fire data: NASA FIRMS (MODIS C6.1, VIIRS 375 m). Basemaps © Esri, HERE, Garmin, © OpenStreetMap contributors.
 - Libraries: Leaflet (BSD-2), Leaflet.draw (MIT), Turf.js (MIT), Apache ECharts (Apache-2.0). Fonts: Inter and Space Grotesk (OFL).
