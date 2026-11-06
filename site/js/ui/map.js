@@ -5,9 +5,21 @@ import { geometryBBox } from '../geo/selection.js';
 const SHAPE = { color: '#ffa630', weight: 2, fillColor: '#ffa630', fillOpacity: 0.08 };
 const INDIA_VIEW = [[6.5, 68], [35.5, 97.5]];
 
+/** Whole-number zoom that best shows India: zoom in a level when it nearly fits (crops edges slightly). */
+function showIndia(map) {
+  const b = L.latLngBounds(INDIA_VIEW);
+  const size = map.getSize();
+  const p0 = map.project(b.getNorthWest(), 0);
+  const p1 = map.project(b.getSouthEast(), 0);
+  const fit = Math.log2(Math.min(size.x / (p1.x - p0.x), size.y / (p1.y - p0.y)));
+  const z = fit - Math.floor(fit) >= 0.7 ? Math.ceil(fit) : Math.floor(fit);
+  map.setView([22.5, 81.5], Math.max(map.getMinZoom(), z));
+}
+
 export function createMap(el, { onSelection, cells, grid }) {
-  const map = L.map(el, { zoomSnap: 0.25, minZoom: 3, maxZoom: 12, worldCopyJump: false, preferCanvas: true });
-  map.fitBounds(INDIA_VIEW);
+  // whole zoom levels only: fractional zoom scales tiles and shows hairline seams
+  const map = L.map(el, { zoomSnap: 1, minZoom: 3, maxZoom: 12, worldCopyJump: false, preferCanvas: true });
+  showIndia(map);
   // Key-free basemaps. Esri dark grey canvas (base + labels) is the default; OpenStreetMap is an alternative.
   const esriAttr = 'Basemap &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors · Fire data NASA FIRMS';
   const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
@@ -90,7 +102,7 @@ export function createMap(el, { onSelection, cells, grid }) {
     /** Show a GeoJSON selection (from presets, forms or URL). null clears. */
     show(feature, fit = true) {
       drawn.clearLayers();
-      if (!feature) { if (fit) map.fitBounds(INDIA_VIEW); return; }
+      if (!feature) { if (fit) showIndia(map); return; }
       const latlngs = feature.geometry.coordinates[0].slice(0, -1).map(([lon, lat]) => [lat, lon]);
       const layer = feature.properties && feature.properties.kind === 'rectangle'
         ? L.rectangle(L.latLngBounds(latlngs), SHAPE) : L.polygon(latlngs, SHAPE);
