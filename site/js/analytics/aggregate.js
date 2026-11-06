@@ -61,4 +61,8 @@ export function round1(x) {
 }
 
 export const isComplete = (p) => p.status === 'ok' || p.status === 'zero';
+/** Months that may serve as (or be scored against) a historical baseline. Terra-only estimates
+ *  (before Aqua) carry a much larger harmonisation uncertainty and are excluded. */
+export const LOW_CONFIDENCE_SOURCES = new Set(['T']);
+export const isBaselineEligible = (p) => isComplete(p) && !LOW_CONFIDENCE_SOURCES.has(p.source);
 export const hasData = (p) => p.status !== 'nodata';

@@ -187,3 +187,15 @@ test('key stats: totals, peaks and latest month', () => {
   const expected = s.reduce((t, p) => t + p.value, 0);
   assert.equal(k.total, expected);
 });
+
+test('Terra-only (low-confidence) months are not scored and not used as references', () => {
+  const s = marchSeries();
+  s.forEach((p) => { if (p.year === 2010) p.source = 'T'; });
+  const scores = scoreSeries(s);
+  const mar2010 = s.findIndex((p) => p.year === 2010 && p.month === 3);
+  const mar2019 = s.findIndex((p) => p.year === 2019 && p.month === 3);
+  assert.equal(scores[mar2010].status, 'lowconf');
+  assert.equal(scores[mar2019].n, 8);
+  const c = compareToHistory(s, [0, s.length - 1], mar2019);
+  assert.equal(c.n, 8);
+});

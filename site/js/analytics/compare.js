@@ -1,6 +1,6 @@
 // Latest (or focused) month vs historical median of the same calendar month.
 import { CONFIG } from '../config.js';
-import { isComplete } from './aggregate.js';
+import { isBaselineEligible, isComplete } from './aggregate.js';
 import { median, percentileRank } from './stats.js';
 import { inRange } from './time.js';
 
@@ -27,7 +27,7 @@ export function compareToHistory(series, range, focusM = null, opts = {}) {
   const { target, skipped, focused } = pickTarget(series, range, focusM);
   if (!target) return { status: 'none', skipped };
   const refs = series
-    .filter((p) => p.month === target.month && p.year !== target.year && isComplete(p))
+    .filter((p) => p.month === target.month && p.year !== target.year && isBaselineEligible(p))
     .map((p) => ({ year: p.year, value: p.value }));
   const values = refs.map((r) => r.value);
   const out = { target, skipped, focused, refs, n: refs.length, targetComplete: isComplete(target) };

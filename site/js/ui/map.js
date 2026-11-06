@@ -1,0 +1,101 @@
+// Leaflet map: basemap, hotspot-cell layer, drawing tools and programmatic selections.
+import { viridis } from '../charts/theme.js';
+import { geometryBBox } from '../geo/selection.js';
+
+const SHAPE = { color: '#ffa630', weight: 2, fillColor: '#ffa630', fillOpacity: 0.08 };
+const INDIA_VIEW = [[6.5, 68], [35.5, 97.5]];
+
+export function createMap(el, { onSelection, cells, grid }) {
+  const map = L.map(el, { zoomSnap: 0.25, minZoom: 3, maxZoom: 12, worldCopyJump: false, preferCanvas: true });
+  map.fitBounds(INDIA_VIEW);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Fire data NASA FIRMS',
+  }).addTo(map);
+
+  // Hotspot cells (0.25 deg), coloured by mean annual harmonised hotspots (log scale).
+  const renderer = L.canvas({ padding: 0.3 });
+  const cellLayer = L.layerGroup();
+  const rects = [];
+  const maxLog = Math.log10(1 + Math.max(...cells.mean_annual));
+  const half = grid / 2;
+  for (let i = 0; i < cells.id.length; i++) {
+    const v = cells.mean_annual[i];
+    const r = L.rectangle([[cells.lat[i] - half, cells.lon[i] - half], [cells.lat[i] + half, cells.lon[i] + half]], {
+      renderer, stroke: false, fillColor: viridis(Math.log10(1 + v) / maxLog), fillOpacity: 0.55, interactive: false,
+    });
+    rects.push(r);
+    cellLayer.addLayer(r);
+  }
+  cellLayer.addTo(map);
+
+  const drawn = new L.FeatureGroup().addTo(map);
+  L.control.layers(null, { 'Hotspot cells (mean annual)': cellLayer }, { position: 'topright', collapsed: true }).addTo(map);
+  map.addControl(new L.Control.Draw({
+    position: 'topleft',
+    draw: {
+      polygon: { allowIntersection: false, showArea: false, shapeOptions: SHAPE, drawError: { color: '#e05252', message: 'Edges cannot cross' } },
+      rectangle: { shapeOptions: SHAPE, showArea: false },
+      polyline: false, circle: false, marker: false, circlemarker: false,
+    },
+    edit: { featureGroup: drawn, remove: true },
+  }));
+
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = () => {
+    const d = L.DomUtil.create('div', 'map-legend');
+    const stops = Array.from({ length: 9 }, (_, i) => viridis(i / 8)).join(',');
+    const top = Math.round(10 ** maxLog - 1);
+    d.innerHTML = `<strong>Mean annual hotspots / cell</strong><div class="ramp" style="background:linear-gradient(90deg,${stops})"></div><div class="ends"><span>1</span><span>${top.toLocaleString('en-US')}</span></div><span>0.25° cells · ${cells.years_for_mean[0]}–${cells.years_for_mean[1]} · log scale</span>`;
+    return d;
+  };
+  legend.addTo(map);
+  const hint = L.control({ position: 'topright' });
+  hint.onAdd = () => {
+    const d = L.DomUtil.create('div', 'map-hint');
+    d.innerHTML = 'Use <b>▭</b> or <b>⬠</b> (top left) to draw a region. Cells are selected by their centre point.';
+    return d;
+  };
+  hint.addTo(map);
+
+  const toFeature = (layer) => {
+    const f = layer.toGeoJSON(); // GeoJSON [lon, lat]
+    f.properties = { kind: layer instanceof L.Rectangle ? 'rectangle' : 'polygon' };
+    return f;
+  };
+  map.on(L.Draw.Event.CREATED, (e) => {
+    drawn.clearLayers();
+    drawn.addLayer(e.layer);
+    onSelection(toFeature(e.layer), 'draw');
+  });
+  map.on(L.Draw.Event.EDITED, () => {
+    const layers = drawn.getLayers();
+    onSelection(layers.length ? toFeature(layers[0]) : null, 'draw');
+  });
+  map.on(L.Draw.Event.DELETED, () => {
+    if (!drawn.getLayers().length) onSelection(null, 'draw');
+  });
+
+  return {
+    map,
+    /** Show a GeoJSON selection (from presets, forms or URL). null clears. */
+    show(feature, fit = true) {
+      drawn.clearLayers();
+      if (!feature) { if (fit) map.fitBounds(INDIA_VIEW); return; }
+      const latlngs = feature.geometry.coordinates[0].slice(0, -1).map(([lon, lat]) => [lat, lon]);
+      const layer = feature.properties && feature.properties.kind === 'rectangle'
+        ? L.rectangle(L.latLngBounds(latlngs), SHAPE) : L.polygon(latlngs, SHAPE);
+      drawn.addLayer(layer);
+      if (fit) {
+        const [w, s, e, n] = geometryBBox(feature);
+        map.fitBounds([[s, w], [n, e]], { padding: [30, 30], maxZoom: 9 });
+      }
+    },
+    /** Emphasise selected cells; mask is a boolean array aligned with cells.id (null = all). */
+    highlight(mask) {
+      for (let i = 0; i < rects.length; i++) {
+        rects[i].setStyle({ fillOpacity: !mask ? 0.55 : mask[i] ? 0.9 : 0.12 });
+      }
+    },
+  };
+}
