@@ -1,0 +1,13 @@
+{
+  "name": "hotspot-sync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "HotSpot Sync - MODIS and VIIRS fire activity explorer for India (static site)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/js/*.test.mjs",
+    "test:e2e": "node tests/e2e/smoke.mjs",
+    "serve": "python3 -m http.server 8000 --directory site"
+  },
+  "license": "MIT"
+}
